@@ -2,7 +2,7 @@
 
 Lançamento de despesas com comprovante durante o evento, entradas (adiantamentos e inscrições), relatório ao vivo com aviso por categoria de orçamento e PDF de prestação de contas.
 
-- `public/` — interface (HTML, CSS e JavaScript sem etapa de build). `pdf.js` gera o PDF no aparelho com `vendor/pdf-lib.min.js`.
+- `public/` — interface (HTML, CSS e JavaScript sem etapa de build). `pdf.js` gera o PDF no aparelho com `vendor/pdf-lib.min.js`; `word.js` gera o relatório em Word (.docx) com `vendor/docx.iife.js`. As duas bibliotecas são carregadas apenas quando a exportação é acionada.
 - `lib/api.mjs` — API: acesso, eventos, despesas, comprovantes, entradas, usuários e cópia dos dados.
 - `netlify/functions/api.mjs` — função Netlify que expõe a API em `/api/*`.
 - `netlify/database/migrations/` — estrutura do banco (Netlify Database / Postgres) e agenda inicial.

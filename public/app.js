@@ -185,9 +185,10 @@
       return '<div class="item"><div class="row"><span class="what">' + esc(d.item) + '</span><span class="val num">' + brl(d.valor) + '</span></div><div class="sub">' + esc(d.fornecedor) + ' · ' + dataBR(d.data) + '</div>' +
         (ev.status === "aberto" ? '<div class="acts"><button class="btn small" data-act="edit" data-v="' + d.id + '">Anexar comprovante</button></div>' : '') + '</div>';
     }).join("") : '<p class="hint">Nenhuma pendência. Todas as despesas têm comprovante anexado.</p>') + '</div>';
-    h += '<div class="card"><h2>Relatório em PDF</h2><p class="hint">' + (ev.status === "fechado" ? "Versão final, com o registro da aprovação." : "Enquanto o evento está aberto, o PDF sai como relatório parcial.") +
-      ' A versão com comprovantes inclui cada nota como anexo e serve como arquivo de fechamento.</p>' +
-      '<div class="acoes"><button class="btn primary" data-act="pdf" data-v="0">Gerar PDF</button><button class="btn" data-act="pdf" data-v="1">Gerar PDF com comprovantes</button>' +
+    h += '<div class="card"><h2>Exportar relatório</h2><p class="hint">' + (ev.status === "fechado" ? "Versão final, com o registro da aprovação." : "Enquanto o evento está aberto, o relatório sai como parcial.") +
+      ' O PDF com comprovantes inclui cada nota como anexo e serve como arquivo de fechamento. O Word traz o relatório sem anexos, para você completar com o seu texto antes de enviar.</p>' +
+      '<div class="acoes"><button class="btn primary" data-act="pdf" data-v="1">PDF com comprovantes</button><button class="btn" data-act="pdf" data-v="0">PDF sem anexos</button>' +
+      '<button class="btn" data-act="word">Word editável</button>' +
       (aprovador() ? '<button class="btn" data-act="exportar">Baixar cópia dos dados</button>' : '') + '</div><div class="hint" id="pdfProg" hidden></div></div>';
     return h;
   }
@@ -382,6 +383,17 @@
     }
     if (act === "exportar") {
       api("GET", "exportar").then(function (d) { baixar(new Blob([JSON.stringify(d, null, 2)], { type: "application/json" }), "prestacao_de_contas_dados_" + hoje() + ".json"); toast("Cópia dos dados baixada."); }, function (e) { toast(e.message, true); });
+      return;
+    }
+    if (act === "word") {
+      if (S.ocupado || !S.det) return;
+      var progW = $("pdfProg"); ocupar(b, "Gerando…");
+      if (progW) { progW.hidden = false; progW.textContent = "Preparando o relatório…"; }
+      window.PCGerarWord({ det: S.det, cats: S.cats, docs: S.docs, resumo: resumo(S.det), logo: logoSrc(S.det.evento),
+        progresso: function (t) { var q = $("pdfProg"); if (q) q.textContent = t; } })
+        .then(function (blob) { baixar(blob, "Prestacao_de_Contas_" + slug(S.det.evento.nome) + ".docx"); toast("Word gerado."); },
+          function (e) { toast(e.message || "Não foi possível gerar o Word.", true); })
+        .then(function () { liberar(b); var q = $("pdfProg"); if (q) q.hidden = true; });
       return;
     }
     if (act === "pdf") {
