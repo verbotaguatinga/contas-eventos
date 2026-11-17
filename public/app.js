@@ -6,7 +6,7 @@
     tela: "carregando",      // carregando | login | app
     modoLogin: "login",      // login | primeiro
     configurado: true,
-    user: null, cats: [], docs: {}, eventos: [], fornecedores: [],
+    user: null, cats: [], ordem: [], pos: {}, docs: {}, eventos: [], fornecedores: [],
     arquivo: null, leitura: null, lendo: false, cnpjLido: null,
     tab: "relatorio", focoId: null, det: null,
     editId: null, evEditId: null, novoEvento: false, confirmar: null,
@@ -69,7 +69,8 @@
       return { i: i, nome: nome, gasto: gasto, orc: orc, pct: pct, st: st };
     });
     var orcTotal = 0; cats.forEach(function (c) { orcTotal += c.orc; });
-    return { cats: cats, gasto: soma(ds), entradas: soma(es), orcTotal: orcTotal, pend: ds.filter(function (d) { return !d.comp_tipo; }) };
+    cats.sort(function (a, b) { return (S.pos[a.i] === undefined ? a.i : S.pos[a.i]) - (S.pos[b.i] === undefined ? b.i : S.pos[b.i]); });
+    return { cats: cats, gasto: soma(ds), entradas: soma(es), orcTotal: orcTotal, pos: S.pos, pend: ds.filter(function (d) { return !d.comp_tipo; }) };
   }
   window.PCResumo = resumo;
 
@@ -115,7 +116,9 @@
   /* ---------- carga ---------- */
   function carregar(manterTela) {
     return api("GET", "estado").then(function (d) {
-      S.user = d.user; S.cats = d.categorias; S.docs = d.docs; S.eventos = d.eventos; S.fornecedores = d.fornecedores || []; S.tela = "app";
+      S.user = d.user; S.cats = d.categorias; S.ordem = d.ordem || d.categorias.map(function (c, i) { return i; });
+      S.pos = {}; S.ordem.forEach(function (idx, n) { S.pos[idx] = n; });
+      S.docs = d.docs; S.eventos = d.eventos; S.fornecedores = d.fornecedores || []; S.tela = "app";
       var a = ativo();
       if (!evPorId(S.focoId)) S.focoId = a ? a.id : null;
       if (!aprovador() && S.tab === "acessos") S.tab = "relatorio";
@@ -215,7 +218,7 @@
       '<label>Valor (R$)<input id="dValor" inputmode="decimal" placeholder="0,00" autocomplete="off" value="' + campoValor(v.valor) + '"></label></div>' +
       '<label>Fornecedor<input id="dForn" autocomplete="off" maxlength="160" value="' + esc(v.fornecedor) + '"></label>' +
       '<label>O que foi comprado<input id="dItem" autocomplete="off" maxlength="240" value="' + esc(v.item) + '"></label>' +
-      '<div class="grid2"><label>Categoria<select id="dCat"><option value="">Selecione</option>' + S.cats.map(function (c, i) { return '<option value="' + i + '"' + (v.categoria === i ? " selected" : "") + '>' + esc(c) + '</option>'; }).join("") + '</select></label>' +
+      '<div class="grid2"><label>Categoria<select id="dCat"><option value="">Selecione</option>' + S.ordem.map(function (i) { return '<option value="' + i + '"' + (v.categoria === i ? " selected" : "") + '>' + esc(S.cats[i]) + '</option>'; }).join("") + '</select></label>' +
       '<label>Tipo de documento<select id="dDoc">' + Object.keys(S.docs).map(function (k) { return '<option value="' + k + '"' + (v.doc === k ? " selected" : "") + '>' + esc(S.docs[k]) + '</option>'; }).join("") + '</select></label></div>' +
       '<label>Observação (opcional)<textarea id="dObs" maxlength="500">' + esc(v.obs) + '</textarea></label>' +
       '<div class="err" id="dErr" hidden></div>' +
@@ -294,7 +297,7 @@
     var usadas = {}; todas.forEach(function (d) { usadas[d.categoria] = 1; });
     var h = '<div class="card"><h2>Despesas lançadas (' + ds.length + (ds.length !== todas.length ? " de " + todas.length : "") + ')</h2>';
     if (todas.length) h += '<div class="filtros"><select id="fFiltro" aria-label="Filtrar despesas"><option value="">Todas as categorias</option><option value="pend"' + (S.filtro === "pend" ? " selected" : "") + '>Comprovante pendente</option>' +
-      S.cats.map(function (c, i) { return usadas[i] ? '<option value="' + i + '"' + (S.filtro === String(i) ? " selected" : "") + '>' + esc(c) + '</option>' : ''; }).join("") + '</select></div>' +
+      S.ordem.map(function (i) { return usadas[i] ? '<option value="' + i + '"' + (S.filtro === String(i) ? " selected" : "") + '>' + esc(S.cats[i]) + '</option>' : ''; }).join("") + '</select></div>' +
       '<p class="hint">Total exibido: <strong class="num">' + brl(soma(ds)) + '</strong></p>';
     h += ds.length ? ds.map(function (d) {
       var c = S.confirmar === "del:" + d.id, u = d.hist.length ? d.hist[d.hist.length - 1] : null;
@@ -343,7 +346,7 @@
         '<label>Arte própria (imagem; usada quando a opção acima for “Arte própria do evento”)<input id="vArte" type="file" accept="image/*"></label>' +
         (ev.tem_arte ? '<p class="hint">Já existe uma arte enviada para este evento. Enviar outra substitui a atual.</p>' : '') +
         '<h2>Orçamento por categoria</h2><p class="hint">Deixe em branco as categorias sem orçamento.</p>' +
-        S.cats.map(function (c, i) { return '<label>' + esc(c) + '<input id="o' + i + '" inputmode="decimal" autocomplete="off" placeholder="Sem orçamento" value="' + campoValor(ev.orcamento[i]) + '"></label>'; }).join("")) +
+        S.ordem.map(function (i) { return '<label>' + esc(S.cats[i]) + '<input id="o' + i + '" inputmode="decimal" autocomplete="off" placeholder="Sem orçamento" value="' + campoValor(ev.orcamento[i]) + '"></label>'; }).join("")) +
       '<div class="err" id="vErr" hidden></div>' +
       '<div class="acoes"><button class="btn primary" type="submit">' + (novo ? "Criar evento" : "Salvar") + '</button><button class="btn" type="button" data-act="evFechar">Cancelar</button></div></form></div>';
   }
@@ -560,6 +563,7 @@
       }
       var orc = {};
       for (var i = 0; i < S.cats.length; i++) {
+        if (!$("o" + i)) continue;
         var t = $("o" + i).value.trim(); if (!t) continue;
         var n = parseValor(t); if (!(n >= 0)) return mostraErro("vErr", "Valor inválido em “" + S.cats[i] + "”. Use o formato 0,00.");
         if (n > 0) orc[i] = n;

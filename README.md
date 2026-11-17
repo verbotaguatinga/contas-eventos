@@ -15,6 +15,7 @@ Lançamento de despesas com comprovante durante o evento, entradas (adiantamento
 - Dois perfis: **aprovador** (abre e fecha eventos, define orçamento, registra entradas, gerencia acessos) e **quem lança** (lança despesas e vê o relatório).
 - Só um evento aberto por vez; os lançamentos entram no evento aberto. Evento fechado fica bloqueado, com registro de quem aprovou e quando.
 - Alterações de despesas ficam no histórico; exclusões são lógicas e aparecem na cópia dos dados.
+- As categorias são um catálogo fixo; o índice no vetor `CATEGORIAS` é o identificador gravado no banco, e `ORDEM` define apenas a sequência de exibição.
 - Cada evento declara como é custeado: **caixa da igreja** (sem entradas, o relatório mostra o custo do evento) ou **verba adiantada** (com entradas e saldo).
 - Ao anexar o comprovante, o sistema lê data, fornecedor, descrição e tipo de documento e preenche o formulário para conferência. O **valor nunca é preenchido automaticamente**: é sempre digitado por quem lança.
 - A categoria escolhida para um fornecedor fica guardada e é sugerida nos lançamentos seguintes.

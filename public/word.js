@@ -168,7 +168,10 @@
 
         // ---------- despesas ----------
         secao("Despesas por categoria");
-        var ordenadas = o.det.despesas.slice().sort(function (a, b) { return a.categoria - b.categoria || (a.data < b.data ? -1 : a.data > b.data ? 1 : 0) || (a.criado_em < b.criado_em ? -1 : 1); });
+        var ordenadas = o.det.despesas.slice().sort(function (a, b) {
+          var pa = (r.pos && r.pos[a.categoria] !== undefined) ? r.pos[a.categoria] : a.categoria;
+          var pb = (r.pos && r.pos[b.categoria] !== undefined) ? r.pos[b.categoria] : b.categoria;
+          return pa - pb || (a.data < b.data ? -1 : a.data > b.data ? 1 : 0) || (a.criado_em < b.criado_em ? -1 : 1); });
         if (!ordenadas.length) filhos.push(p("Nenhuma despesa lançada.", { tam: 21, cor: MUTED }));
         var colsD = [{ t: "Data", w: 1250 }, { t: "Fornecedor", w: 2100 }, { t: "Descrição", w: 3289 }, { t: "Documento", w: 1600 }, { t: "Valor", w: 1400, a: "r" }];
         r.cats.forEach(function (c) {

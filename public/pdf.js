@@ -141,7 +141,10 @@
 
         // ----- despesas -----
         var anexos = [], numAnexo = {};
-        var ordenadas = o.det.despesas.slice().sort(function (a, b) { return a.categoria - b.categoria || (a.data < b.data ? -1 : a.data > b.data ? 1 : 0) || (a.criado_em < b.criado_em ? -1 : 1); });
+        var ordenadas = o.det.despesas.slice().sort(function (a, b) {
+          var pa = (r.pos && r.pos[a.categoria] !== undefined) ? r.pos[a.categoria] : a.categoria;
+          var pb = (r.pos && r.pos[b.categoria] !== undefined) ? r.pos[b.categoria] : b.categoria;
+          return pa - pb || (a.data < b.data ? -1 : a.data > b.data ? 1 : 0) || (a.criado_em < b.criado_em ? -1 : 1); });
         if (o.anexos) ordenadas.forEach(function (d) { if (d.comp_tipo) { anexos.push(d); numAnexo[d.id] = anexos.length; } });
         secao("Despesas por categoria");
         if (!ordenadas.length) par("Nenhuma despesa lançada.", 9.5, MUTED);

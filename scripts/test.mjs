@@ -41,7 +41,8 @@ assert.equal((await A("POST", "auth/primeiro-acesso", { email: "ap@x.com", nome:
 r = await A("POST", "auth/primeiro-acesso", { email: "ap@x.com", nome: "Kaleb", codigo: "instalacao-teste-123", senha: "senha-bem-longa" });
 assert.equal(r.s, 200); assert.equal(r.d.papel, "aprovador");
 assert.equal((await X("GET", "auth/situacao")).d.configurado, true);
-r = await A("GET", "estado"); assert.equal(r.d.eventos.length, 5); assert.equal(r.d.categorias.length, 10);
+r = await A("GET", "estado"); assert.equal(r.d.eventos.length, 5); assert.equal(r.d.categorias.length, 11);
+assert.equal(r.d.categorias[10], "Sala de Ministros"); assert.deepEqual(r.d.ordem, [0, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
 const [cm, avm] = r.d.eventos;
 assert.deepEqual(cm.orcamento, {}); assert.equal(avm.logo, "avm");
 
@@ -79,7 +80,7 @@ assert.equal((await A("POST", "eventos/" + cm.id + "/abrir")).s, 409);
 assert.equal((await L("POST", "despesas", desp({ fornecedor: " " }))).s, 400);
 assert.equal((await L("POST", "despesas", desp({ valor: 0 }))).s, 400);
 assert.equal((await L("POST", "despesas", desp({ valor: 10.5 }))).s, 400);
-assert.equal((await L("POST", "despesas", desp({ categoria: 10 }))).s, 400);
+assert.equal((await L("POST", "despesas", desp({ categoria: 11 }))).s, 400);
 assert.equal((await L("POST", "despesas", desp({ data: "2027-02-30" }))).s, 400);
 assert.equal((await L("POST", "despesas", desp({ comprovante: { tipo: "image/jpeg", nome: "a.jpg", dados: Buffer.from("nao e jpg").toString("base64") } }))).s, 400);
 r = await L("POST", "despesas", desp({ comprovante: { tipo: "image/jpeg", nome: "nota.jpg", dados: jpg } })); assert.equal(r.s, 201); const d1 = r.d.id;
