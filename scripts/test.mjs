@@ -1,7 +1,7 @@
 // Teste de integração da API sobre um Postgres local descartável.
 // Uso: DATABASE_URL=postgres://dev:dev@localhost/postgres npm test
 import assert from "node:assert";
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import pg from "pg";
 import { handle } from "../lib/api.mjs";
 
@@ -14,6 +14,8 @@ const pool = new pg.Pool({ connectionString: u.toString() });
 const dir = new URL("../netlify/database/migrations/", import.meta.url);
 for (const f of readdirSync(dir).sort()) await pool.query(readFileSync(new URL(f, dir), "utf8"));
 process.env.SETUP_CODE = "INSTALACAO-TESTE-123";
+// o teste não usa o AI Gateway: exercita apenas o caminho determinístico
+delete process.env.ANTHROPIC_API_KEY; delete process.env.ANTHROPIC_BASE_URL;
 
 function cliente() {
   let ck = "";
@@ -105,6 +107,29 @@ assert.equal((await A("PUT", "eventos/" + cm.id, { nome: cm.nome, inicio: cm.ini
 assert.equal((await A("PUT", "eventos/" + cm.id, { nome: cm.nome, inicio: cm.inicio, fim: cm.fim, logo: "propria", orcamento: cm.orcamento })).s, 400);
 assert.equal((await A("PUT", "eventos/" + cm.id, { nome: cm.nome, inicio: cm.inicio, fim: cm.fim, logo: "vv", orcamento: { 0: 500000, 6: 150000 } })).s, 200);
 r = await A("GET", "eventos/" + cm.id); assert.deepEqual(r.d.evento.orcamento, { 0: 500000, 6: 150000 });
+// custeio do evento e memória de fornecedor
+r = await A("GET", "estado");
+assert.equal(cm.custeio, "adiantado"); assert.equal(avm.custeio, "adiantado");
+assert.equal(r.d.eventos[2].custeio, "caixa"); assert.equal(r.d.eventos[4].custeio, "caixa");
+assert.equal((await A("PUT", "eventos/" + cm.id, { nome: cm.nome, inicio: cm.inicio, fim: cm.fim, logo: "vv", custeio: "caixa", orcamento: {} })).s, 409, "evento com entradas não vira caixa");
+r = await A("GET", "estado");
+const adega = r.d.fornecedores.find((f) => /ADEGA/.test(f.chave));
+assert.ok(adega, "fornecedor memorizado"); assert.equal(adega.categoria, 1, "memória guarda a última categoria escolhida");
+assert.equal(r.d.fornecedores.find((f) => /^\d{14}$/.test(f.chave)), undefined);
+// leitura de comprovante: PDF com texto é lido por regras, sem IA
+const amostra = "/home/claude/comprovantes/NFe_Rafaela_buffet.pdf";
+if (existsSync(amostra)) {
+  r = await L("POST", "ler-comprovante", { comprovante: { tipo: "application/pdf", nome: "nf.pdf", dados: readFileSync(amostra).toString("base64") } });
+  assert.equal(r.s, 200); assert.equal(r.d.fonte, "regras");
+  assert.equal(r.d.leitura.valor, 1000000); assert.match(r.d.leitura.fornecedor, /RAFAELA/);
+  assert.equal(r.d.leitura.data, "2026-11-04"); assert.equal(r.d.leitura.doc, "nf");
+  console.log("leitura de PDF por regras: ok");
+} else console.log("amostra de PDF ausente, leitura não exercitada");
+r = await L("POST", "ler-comprovante", { comprovante: { tipo: "application/pdf", nome: "x.pdf", dados: Buffer.from("%PDF-1.4 vazio").toString("base64") } });
+assert.equal(r.s, 200); assert.equal(r.d.leitura.valor, null); assert.ok(r.d.aviso, "avisa quando não consegue ler");
+r = await L("POST", "ler-comprovante", { comprovante: { tipo: "image/jpeg", nome: "f.jpg", dados: jpg } });
+assert.equal(r.s, 200); assert.equal(r.d.fonte, "indisponivel");
+
 // exclusão com rastro
 assert.equal((await L("DELETE", "despesas/" + d1)).s, 200);
 assert.equal((await L("DELETE", "despesas/" + d1)).s, 409);

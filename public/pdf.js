@@ -110,13 +110,16 @@
 
         // ----- resumo executivo -----
         secao("Resumo executivo");
-        var saldo = r.entradas - r.gasto, cx = [["Total gasto", brl(r.gasto)], ["Orçamento total", r.orcTotal ? brl(r.orcTotal) : "Sem orçamento"], ["Entradas", brl(r.entradas)], [saldo < 0 ? "Saldo a receber" : "Saldo disponível", brl(Math.abs(saldo))]];
-        var bw = (CW - 3 * 8) / 4;
+        var saldo = r.entradas - r.gasto, adiantado = ev.custeio === "adiantado";
+        var cx = adiantado
+          ? [["Total gasto", brl(r.gasto)], ["Orçamento total", r.orcTotal ? brl(r.orcTotal) : "Sem orçamento"], ["Entradas", brl(r.entradas)], [saldo < 0 ? "Saldo a receber" : "Saldo disponível", brl(Math.abs(saldo))]]
+          : [["Custo do evento", brl(r.gasto)], ["Orçamento total", r.orcTotal ? brl(r.orcTotal) : "Sem orçamento"]];
+        var bw = (CW - (cx.length - 1) * 8) / cx.length;
         cx.forEach(function (k, i) {
           var x = M + i * (bw + 8); ret(x, y, bw, 46, i === 0 ? NAVY : SOFT);
           tx(k[0].toUpperCase(), x + 8, y + 15, 7, FB, i === 0 ? PALE : MUTED);
           var sz = 12.5; while (larg(k[1], sz, FB) > bw - 16 && sz > 7) sz -= 0.5;
-          tx(k[1], x + 8, y + 34, sz, FB, i === 0 ? GOLD : (i === 3 && saldo < 0 ? WINE : INK));
+          tx(k[1], x + 8, y + 34, sz, FB, i === 0 ? GOLD : (adiantado && i === 3 && saldo < 0 ? WINE : INK));
         });
         y += 46 + 10;
         if (ev.status === "fechado") par("Evento fechado. Prestação de contas aprovada por " + ev.aprovado_por + " em " + quando(ev.aprovado_em) + ".", 9.5, INK);
@@ -153,18 +156,23 @@
         if (ordenadas.length) { cabe(30); y += 8; ret(M, y, CW, 22, NAVY); tx("TOTAL DE DESPESAS", M + 10, y + 15, 9.5, FB, WHITE); txR(brl(r.gasto), M + CW - 10, y + 15, 11, FB, GOLD); y += 22; }
 
         // ----- entradas e saldo -----
-        secao("Entradas");
-        if (!o.det.entradas.length) par("Nenhuma entrada registrada.", 9.5, MUTED);
-        else {
-          var es = o.det.entradas.slice().sort(function (a, b) { return a.data < b.data ? -1 : 1; });
-          var le = es.map(function (e) { return { c: [dataBR(e.data), e.tipo, e.origem, e.finalidade || "—", brl(e.valor)] }; });
-          le.push({ c: ["Total", "", "", "", brl(r.entradas)], b: true, fundo: rgb(0.88, 0.91, 0.95) });
-          tabela([{ t: "Data", w: 54 }, { t: "Tipo", w: 76 }, { t: "Origem", w: 150 }, { t: "Finalidade", w: 153 }, { t: "Valor", w: CW - 433, a: "r" }], le);
+        if (adiantado) {
+          secao("Entradas");
+          if (!o.det.entradas.length) par("Nenhuma entrada registrada.", 9.5, MUTED);
+          else {
+            var es = o.det.entradas.slice().sort(function (a, b) { return a.data < b.data ? -1 : 1; });
+            var le = es.map(function (e) { return { c: [dataBR(e.data), e.tipo, e.origem, e.finalidade || "—", brl(e.valor)] }; });
+            le.push({ c: ["Total", "", "", "", brl(r.entradas)], b: true, fundo: rgb(0.88, 0.91, 0.95) });
+            tabela([{ t: "Data", w: 54 }, { t: "Tipo", w: 76 }, { t: "Origem", w: 150 }, { t: "Finalidade", w: 153 }, { t: "Valor", w: CW - 433, a: "r" }], le);
+          }
+          secao("Saldo do evento");
+          tabela([{ t: "Composição", w: CW - 120 }, { t: "Valor", w: 120, a: "r" }], [
+            { c: ["Entradas (adiantamentos e inscrições)", brl(r.entradas)] }, { c: ["Despesas", "- " + brl(r.gasto)] },
+            { c: [saldo < 0 ? "Saldo a receber" : "Saldo disponível", brl(Math.abs(saldo))], b: true, fundo: rgb(0.88, 0.91, 0.95), cor: saldo < 0 ? WINE : undefined }]);
+
+        } else {
+          par("Evento pago diretamente pelo caixa da igreja: não há verba adiantada nem saldo a apurar. O valor acima é o custo total do evento.", 9.5, MUTED);
         }
-        secao("Saldo do evento");
-        tabela([{ t: "Composição", w: CW - 120 }, { t: "Valor", w: 120, a: "r" }], [
-          { c: ["Entradas (adiantamentos e inscrições)", brl(r.entradas)] }, { c: ["Despesas", "- " + brl(r.gasto)] },
-          { c: [saldo < 0 ? "Saldo a receber" : "Saldo disponível", brl(Math.abs(saldo))], b: true, fundo: rgb(0.88, 0.91, 0.95), cor: saldo < 0 ? WINE : undefined }]);
 
         if (r.pend.length) {
           secao("Comprovantes pendentes");

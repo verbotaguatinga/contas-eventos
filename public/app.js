@@ -6,7 +6,8 @@
     tela: "carregando",      // carregando | login | app
     modoLogin: "login",      // login | primeiro
     configurado: true,
-    user: null, cats: [], docs: {}, eventos: [],
+    user: null, cats: [], docs: {}, eventos: [], fornecedores: [],
+    arquivo: null, leitura: null, lendo: false, cnpjLido: null,
     tab: "relatorio", focoId: null, det: null,
     editId: null, evEditId: null, novoEvento: false, confirmar: null,
     usuarios: null, codigo: null, filtro: "", ocupado: false
@@ -114,7 +115,7 @@
   /* ---------- carga ---------- */
   function carregar(manterTela) {
     return api("GET", "estado").then(function (d) {
-      S.user = d.user; S.cats = d.categorias; S.docs = d.docs; S.eventos = d.eventos; S.tela = "app";
+      S.user = d.user; S.cats = d.categorias; S.docs = d.docs; S.eventos = d.eventos; S.fornecedores = d.fornecedores || []; S.tela = "app";
       var a = ativo();
       if (!evPorId(S.focoId)) S.focoId = a ? a.id : null;
       if (!aprovador() && S.tab === "acessos") S.tab = "relatorio";
@@ -156,7 +157,10 @@
       (ev.status !== "aberto" && ativo() ? '<div><button class="btn small" data-act="foco" data-v="' + ativo().id + '">Voltar ao evento ativo</button></div>' : '') + '</div></div>';
   }
   function vTabs() {
-    var tabs = [["relatorio", "Relatório"], ["lancar", "Lançar despesa"], ["despesas", "Despesas"], ["entradas", "Entradas"], ["eventos", "Eventos"]];
+    var adiantado = S.det && S.det.evento.custeio === "adiantado";
+    var tabs = [["relatorio", "Relatório"], ["lancar", "Lançar despesa"], ["despesas", "Despesas"]];
+    if (adiantado) tabs.push(["entradas", "Entradas"]);
+    tabs.push(["eventos", "Eventos"]);
     if (aprovador()) tabs.push(["acessos", "Acessos"]);
     return '<div class="tabs-scroll"><div class="tabs" role="tablist">' + tabs.map(function (t) {
       return '<button class="tab" role="tab" data-act="tab" data-v="' + t[0] + '" aria-selected="' + (S.tab === t[0]) + '">' + t[1] + '</button>';
@@ -166,13 +170,14 @@
 
   function vRelatorio() {
     if (!S.det) return semEvento();
-    var ev = S.det.evento, r = resumo(S.det), saldo = r.entradas - r.gasto;
+    var ev = S.det.evento, r = resumo(S.det), saldo = r.entradas - r.gasto, adiantado = ev.custeio === "adiantado";
     var h = '<div class="kpis">' +
-      '<div class="kpi main"><div class="k">Total gasto</div><div class="v num">' + brl(r.gasto) + '</div></div>' +
+      '<div class="kpi main"><div class="k">' + (adiantado ? "Total gasto" : "Custo do evento") + '</div><div class="v num">' + brl(r.gasto) + '</div></div>' +
       '<div class="kpi"><div class="k">Orçamento total</div><div class="v num">' + (r.orcTotal ? brl(r.orcTotal) : "Sem orçamento") + '</div></div>' +
-      '<div class="kpi"><div class="k">Entradas</div><div class="v num">' + brl(r.entradas) + '</div></div>' +
-      '<div class="kpi" style="grid-column:1 / -1"><div class="k">Saldo do evento (entradas menos gastos)</div><div class="v num ' + (saldo < 0 ? "neg" : "pos") + '">' + brl(saldo) + '</div>' +
-      '<div class="hint">' + (saldo < 0 ? "Saldo a receber." : "Saldo disponível.") + '</div></div></div>';
+      (adiantado ? '<div class="kpi"><div class="k">Entradas</div><div class="v num">' + brl(r.entradas) + '</div></div>' +
+        '<div class="kpi" style="grid-column:1 / -1"><div class="k">Saldo do evento (entradas menos gastos)</div><div class="v num ' + (saldo < 0 ? "neg" : "pos") + '">' + brl(saldo) + '</div>' +
+        '<div class="hint">' + (saldo < 0 ? "Saldo a receber." : "Saldo disponível.") + '</div></div>'
+        : '<div class="kpi" style="grid-column:1 / -1"><div class="hint">Evento pago pelo caixa da igreja. O valor acima é o custo total, não há saldo a apurar.</div></div>') + '</div>';
     if (ev.status === "fechado") h += '<div class="card"><p class="hint">Evento fechado. Prestação de contas aprovada por <strong>' + esc(ev.aprovado_por) + '</strong> em ' + quando(ev.aprovado_em) + '.</p></div>';
     var comMov = r.cats.filter(function (c) { return c.gasto > 0 || c.orc > 0; });
     h += '<div class="card"><h2>Gasto por categoria</h2>' + (comMov.length ? comMov.map(function (c) {
@@ -202,19 +207,84 @@
     return '<div class="card"><h2>' + (d ? "Editar despesa" : "Nova despesa") + '</h2>' +
       '<p class="hint">A despesa entra no evento ativo. Lance somente após o pagamento, com nota, cupom ou recibo.</p>' +
       '<form id="fDesp" novalidate>' +
+      '<label>' + (d && d.comp_tipo ? "Substituir o comprovante (opcional)" : "Comprovante") + '<input id="dFoto" type="file" accept="image/*,application/pdf"></label>' +
+      '<p class="hint">' + (d && d.comp_tipo ? 'Já existe um comprovante anexado. <a href="/api/despesas/' + d.id + '/comprovante" target="_blank" rel="noopener">Ver comprovante</a>. ' : '') +
+      'Tire a foto na hora ou escolha um arquivo que já está no celular, inclusive PDF. O sistema lê o comprovante e preenche os campos para você conferir. Sem comprovante, a despesa fica marcada como pendente no relatório.</p>' +
+      '<div id="dLeitura">' + caixaLeitura() + '</div>' +
       '<div class="grid2"><label>Data do pagamento<input id="dData" type="date" value="' + esc(v.data) + '"></label>' +
       '<label>Valor (R$)<input id="dValor" inputmode="decimal" placeholder="0,00" autocomplete="off" value="' + campoValor(v.valor) + '"></label></div>' +
       '<label>Fornecedor<input id="dForn" autocomplete="off" maxlength="160" value="' + esc(v.fornecedor) + '"></label>' +
       '<label>O que foi comprado<input id="dItem" autocomplete="off" maxlength="240" value="' + esc(v.item) + '"></label>' +
       '<div class="grid2"><label>Categoria<select id="dCat"><option value="">Selecione</option>' + S.cats.map(function (c, i) { return '<option value="' + i + '"' + (v.categoria === i ? " selected" : "") + '>' + esc(c) + '</option>'; }).join("") + '</select></label>' +
       '<label>Tipo de documento<select id="dDoc">' + Object.keys(S.docs).map(function (k) { return '<option value="' + k + '"' + (v.doc === k ? " selected" : "") + '>' + esc(S.docs[k]) + '</option>'; }).join("") + '</select></label></div>' +
-      '<label>' + (d && d.comp_tipo ? "Substituir o comprovante (opcional)" : "Comprovante") + '<input id="dFoto" type="file" accept="image/*,application/pdf"></label>' +
-      '<p class="hint">' + (d && d.comp_tipo ? 'Já existe um comprovante anexado. <a href="/api/despesas/' + d.id + '/comprovante" target="_blank" rel="noopener">Ver comprovante</a>. ' : '') +
-      'Tire a foto na hora ou escolha um arquivo que já está no celular, inclusive PDF. Sem comprovante, a despesa fica marcada como pendente no relatório.</p>' +
       '<label>Observação (opcional)<textarea id="dObs" maxlength="500">' + esc(v.obs) + '</textarea></label>' +
       '<div class="err" id="dErr" hidden></div>' +
       '<div class="acoes"><button class="btn primary" type="submit" id="dEnviar">' + (d ? "Salvar alteração" : "Lançar despesa") + '</button>' +
       (d ? '<button class="btn" type="button" data-act="cancelEdit">Cancelar</button>' : '') + '</div></form></div>';
+  }
+
+  function caixaLeitura() {
+    if (S.lendo) return '<div class="aviso">Lendo o comprovante…</div>';
+    var L = S.leitura;
+    if (!L) return "";
+    return '<div class="card" style="background:var(--surface2);margin:0 0 4px">' +
+      '<span class="lbl">Leitura do comprovante</span>' +
+      (L.valor ? '<div class="row"><span class="what">Valor na nota</span><span class="val num">' + brl(L.valor) + '</span></div>' +
+        '<p class="hint">Confira esse valor na nota e digite-o no campo abaixo. O sistema não preenche o valor sozinho.</p>'
+        : '<p class="hint">Não foi possível identificar o valor. Digite-o conferindo a nota.</p>') +
+      (L.aviso ? '<p class="hint">' + esc(L.aviso) + '</p>' : '') +
+      (L.rodape ? '<p class="hint">' + esc(L.rodape) + '</p>' : '') + '</div>';
+  }
+  function pintaLeitura() { var el = $("dLeitura"); if (el) el.innerHTML = caixaLeitura(); }
+
+  // Procura o fornecedor na memória e devolve a categoria já usada antes.
+  function categoriaLembrada(nome, cnpj) {
+    var k = chaveForn(nome), i;
+    if (cnpj) for (i = 0; i < S.fornecedores.length; i++) if (S.fornecedores[i].cnpj === cnpj) return S.fornecedores[i].categoria;
+    if (!k || k.length < 3) return null;
+    for (i = 0; i < S.fornecedores.length; i++) if (S.fornecedores[i].chave === k) return S.fornecedores[i].categoria;
+    return null;
+  }
+  function chaveForn(nome) {
+    var k = String(nome || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase()
+      .replace(/[^A-Z0-9 ]+/g, " ").replace(/\b(LTDA|ME|EPP|EIRELI|SA|MEI|COMERCIO|COMERCIAL|SERVICOS|SOLUCOES)\b/g, " ")
+      .replace(/\s+/g, " ").trim();
+    return k;
+  }
+
+  function lerComprovante(file) {
+    S.leitura = null; S.arquivo = null;
+    if (!file) { pintaLeitura(); return; }
+    S.lendo = true; pintaLeitura();
+    prepararArquivo(file, 1600, false).then(function (arq) {
+      S.arquivo = arq;
+      return api("POST", "ler-comprovante", { comprovante: arq });
+    }).then(function (r) {
+      S.lendo = false;
+      var L = r.leitura || {};
+      S.cnpjLido = L.cnpj || null;
+      var preenchidos = [];
+      function por(id, valor) {
+        var el = $(id);
+        if (!el || !valor || (el.value && el.value !== hoje())) return;
+        el.value = valor; preenchidos.push(id);
+      }
+      por("dData", L.data); por("dForn", L.fornecedor); por("dItem", L.item);
+      if ($("dDoc") && L.doc) $("dDoc").value = L.doc;
+      var cat = L.categoria;
+      if (cat === null || cat === undefined) cat = categoriaLembrada(L.fornecedor, L.cnpj);
+      if ($("dCat") && $("dCat").value === "" && cat !== null && cat !== undefined) { $("dCat").value = String(cat); preenchidos.push("dCat"); }
+      var origem = r.fonte === "ia" ? "leitura automática" : r.fonte === "regras+ia" ? "dados da nota e leitura automática" : "dados da nota";
+      S.leitura = { valor: L.valor, aviso: r.aviso || "",
+        rodape: preenchidos.length ? "Campos preenchidos pela " + origem + ": confira cada um antes de lançar."
+          : (r.fonte === "falhou" || r.fonte === "indisponivel" ? "" : "Nada foi preenchido automaticamente.") +
+            (L.categoria_fonte === "historico" ? " Categoria sugerida pelo histórico deste fornecedor." : "") };
+      if (L.categoria_fonte === "historico" && preenchidos.indexOf("dCat") >= 0) S.leitura.rodape += " A categoria veio do histórico deste fornecedor.";
+      pintaLeitura();
+    }, function (e) {
+      S.lendo = false; S.leitura = { valor: null, aviso: e.message, rodape: "Preencha os campos manualmente; o comprovante será anexado normalmente." };
+      pintaLeitura();
+    });
   }
 
   function vDespesas() {
@@ -265,6 +335,8 @@
     return '<div class="card" id="cardEv"><h2>' + (novo ? "Novo evento" : "Dados e orçamento do evento") + '</h2><form id="fEv" novalidate>' +
       '<label>Nome do evento<input id="vNome" maxlength="160" autocomplete="off" value="' + esc(ev.nome) + '"></label>' +
       '<div class="grid2"><label>Data de início<input id="vInicio" type="date" value="' + esc(ev.inicio) + '"></label><label>Data de término (opcional)<input id="vFim" type="date" value="' + esc(ev.fim || "") + '"></label></div>' +
+      '<label>Como o evento é custeado<select id="vCusteio"><option value="caixa"' + (ev.custeio !== "adiantado" ? " selected" : "") + '>Caixa da igreja (sem entradas e sem saldo)</option>' +
+      '<option value="adiantado"' + (ev.custeio === "adiantado" ? " selected" : "") + '>Verba adiantada pelos organizadores e inscrições</option></select></label>' +
       '<label>Logo no relatório<select id="vLogo"><option value="vv"' + (ev.logo === "vv" ? " selected" : "") + '>Verbo da Vida</option><option value="avm"' + (ev.logo === "avm" ? " selected" : "") + '>Avivamento e Milagres</option>' +
       (novo ? '' : '<option value="propria"' + (ev.logo === "propria" ? " selected" : "") + '>Arte própria do evento</option>') + '</select></label>' +
       (novo ? '<p class="hint">A arte própria e o orçamento podem ser definidos depois de criar o evento.</p>' :
@@ -354,7 +426,7 @@
     if (act !== "del" && act !== "delE" && act !== "fechar" && act !== "abrir" && act !== "reabrir" && act !== "ativar") S.confirmar = null;
     if (act === "recarregar") { iniciar(); return; }
     if (act === "modoLogin") { S.modoLogin = v; render(); return; }
-    if (act === "tab") { S.tab = v; if (v !== "lancar") S.editId = null; S.evEditId = null; S.novoEvento = false; render(); if (v === "acessos") carregarUsuarios(); window.scrollTo(0, 0); return; }
+    if (act === "tab") { S.tab = v; if (v !== "lancar") S.editId = null; S.leitura = null; S.arquivo = null; S.lendo = false; S.cnpjLido = null; S.evEditId = null; S.novoEvento = false; render(); if (v === "acessos") carregarUsuarios(); window.scrollTo(0, 0); return; }
     if (act === "sair") { api("POST", "auth/logout").then(function () { S.user = null; S.det = null; S.usuarios = null; S.codigo = null; S.tela = "login"; S.modoLogin = "login"; render(); }, function (e) { toast(e.message, true); }); return; }
     if (act === "edit") { S.editId = v; S.tab = "lancar"; render(); window.scrollTo(0, 0); return; }
     if (act === "cancelEdit") { S.editId = null; S.tab = "despesas"; render(); return; }
@@ -411,6 +483,11 @@
 
   document.addEventListener("change", function (ev) {
     if (ev.target.id === "fFiltro") { S.filtro = ev.target.value; S.confirmar = null; render(); }
+    if (ev.target.id === "dFoto") lerComprovante(ev.target.files[0]);
+    if (ev.target.id === "dForn" && $("dCat") && $("dCat").value === "") {
+      var c = categoriaLembrada(ev.target.value, S.cnpjLido);
+      if (c !== null) { $("dCat").value = String(c); toast("Categoria sugerida pelo histórico deste fornecedor."); }
+    }
   });
 
   document.addEventListener("submit", function (ev) {
@@ -443,13 +520,14 @@
       if (!$("dItem").value.trim()) return mostraErro("dErr", "Informe o que foi comprado.");
       if (cat === "") return mostraErro("dErr", "Selecione a categoria.");
       var d = { data: $("dData").value, valor: valor, fornecedor: $("dForn").value, item: $("dItem").value, categoria: Number(cat), doc: $("dDoc").value, obs: $("dObs").value };
-      ocupar(btn, arq ? "Preparando o comprovante…" : "Enviando…");
-      (arq ? prepararArquivo(arq, 1600, false) : Promise.resolve(null)).then(function (c) {
+      if (S.cnpjLido) d.cnpj = S.cnpjLido;
+      ocupar(btn, arq && !S.arquivo ? "Preparando o comprovante…" : "Enviando…");
+      (arq ? (S.arquivo ? Promise.resolve(S.arquivo) : prepararArquivo(arq, 1600, false)) : Promise.resolve(null)).then(function (c) {
         if (c) d.comprovante = c;
         btn.textContent = "Enviando…";
         return editando ? api("PUT", "despesas/" + editando, d) : api("POST", "despesas", d);
       }).then(function () {
-        S.ocupado = false; S.editId = null;
+        S.ocupado = false; S.editId = null; S.leitura = null; S.arquivo = null; S.cnpjLido = null;
         toast(editando ? "Alteração salva." : "Despesa lançada" + (arq ? " com comprovante." : ". Comprovante pendente."));
         if (editando) S.tab = "despesas";
         return carregar(true).then(function () { window.scrollTo(0, 0); });
@@ -471,7 +549,7 @@
 
     if (f.id === "fEv") {
       $("vErr").hidden = true;
-      var id = S.evEditId, base = { nome: $("vNome").value, inicio: $("vInicio").value, fim: $("vFim").value || null, logo: $("vLogo").value };
+      var id = S.evEditId, base = { nome: $("vNome").value, inicio: $("vInicio").value, fim: $("vFim").value || null, logo: $("vLogo").value, custeio: $("vCusteio").value };
       if (!base.nome.trim()) return mostraErro("vErr", "Informe o nome do evento.");
       if (!base.inicio) return mostraErro("vErr", "Informe a data de início.");
       if (base.fim && base.fim < base.inicio) return mostraErro("vErr", "A data de término não pode ser anterior ao início.");

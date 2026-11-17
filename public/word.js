@@ -130,20 +130,20 @@
         }));
 
         // ---------- resumo executivo ----------
-        var saldo = r.entradas - r.gasto;
+        var saldo = r.entradas - r.gasto, adiantado = ev.custeio === "adiantado";
         secao("Resumo executivo");
-        var w4 = Math.floor(LARGURA / 4);
+        var kpis = adiantado
+          ? [["Total gasto", brl(r.gasto)], ["Orçamento total", r.orcTotal ? brl(r.orcTotal) : "Sem orçamento"],
+             ["Entradas", brl(r.entradas)], [saldo < 0 ? "Saldo a receber" : "Saldo disponível", brl(Math.abs(saldo))]]
+          : [["Custo do evento", brl(r.gasto)], ["Orçamento total", r.orcTotal ? brl(r.orcTotal) : "Sem orçamento"]];
+        var wk = Math.floor(LARGURA / kpis.length);
+        var larguraDe = function (i) { return i === kpis.length - 1 ? LARGURA - (kpis.length - 1) * wk : wk; };
         filhos.push(tabela([
-          new D.TableRow({ children: [
-            celula("Total gasto", { w: w4, fundo: NAVY, cor: PALE, negrito: true, tam: 16, caixa: true }),
-            celula("Orçamento total", { w: w4, fundo: SOFT, cor: MUTED, negrito: true, tam: 16, caixa: true }),
-            celula("Entradas", { w: w4, fundo: SOFT, cor: MUTED, negrito: true, tam: 16, caixa: true }),
-            celula(saldo < 0 ? "Saldo a receber" : "Saldo disponível", { w: LARGURA - 3 * w4, fundo: SOFT, cor: MUTED, negrito: true, tam: 16, caixa: true })] }),
-          new D.TableRow({ children: [
-            celula(brl(r.gasto), { w: w4, fundo: NAVY, cor: GOLD, negrito: true, tam: 24 }),
-            celula(r.orcTotal ? brl(r.orcTotal) : "Sem orçamento", { w: w4, fundo: SOFT, negrito: true, tam: 24 }),
-            celula(brl(r.entradas), { w: w4, fundo: SOFT, negrito: true, tam: 24 }),
-            celula(brl(Math.abs(saldo)), { w: LARGURA - 3 * w4, fundo: SOFT, negrito: true, tam: 24, cor: saldo < 0 ? WINE : INK })] })
+          new D.TableRow({ children: kpis.map(function (k, i) {
+            return celula(k[0], { w: larguraDe(i), fundo: i === 0 ? NAVY : SOFT, cor: i === 0 ? PALE : MUTED, negrito: true, tam: 16, caixa: true }); }) }),
+          new D.TableRow({ children: kpis.map(function (k, i) {
+            return celula(k[1], { w: larguraDe(i), fundo: i === 0 ? NAVY : SOFT, negrito: true, tam: 24,
+              cor: i === 0 ? GOLD : (adiantado && i === 3 && saldo < 0 ? WINE : INK) }); }) })
         ], semBordas()));
         filhos.push(p("", { depois: 120 }));
         if (ev.status === "fechado") filhos.push(p("Evento fechado. Prestação de contas aprovada por " + ev.aprovado_por + " em " + quando(ev.aprovado_em) + ".", { tam: 21 }));
@@ -183,19 +183,23 @@
           celula(brl(r.gasto), { w: 2000, fundo: NAVY, cor: GOLD, negrito: true, tam: 22, align: D.AlignmentType.RIGHT })] })], semBordas()));
 
         // ---------- entradas e saldo ----------
-        secao("Entradas");
-        if (!o.det.entradas.length) filhos.push(p("Nenhuma entrada registrada.", { tam: 21, cor: MUTED }));
-        else {
-          var es = o.det.entradas.slice().sort(function (a, b) { return a.data < b.data ? -1 : 1; });
-          var le = es.map(function (e) { return { c: [dataBR(e.data), e.tipo, e.origem, e.finalidade || "—", brl(e.valor)] }; });
-          le.push({ c: ["Total", "", "", "", brl(r.entradas)], negrito: true, fundo: "DDE4EC" });
-          filhos.push(grade([{ t: "Data", w: 1250 }, { t: "Tipo", w: 1400 }, { t: "Origem", w: 2600 }, { t: "Finalidade", w: 2989 }, { t: "Valor", w: 1400, a: "r" }], le));
+        if (adiantado) {
+          secao("Entradas");
+          if (!o.det.entradas.length) filhos.push(p("Nenhuma entrada registrada.", { tam: 21, cor: MUTED }));
+          else {
+            var es = o.det.entradas.slice().sort(function (a, b) { return a.data < b.data ? -1 : 1; });
+            var le = es.map(function (e) { return { c: [dataBR(e.data), e.tipo, e.origem, e.finalidade || "—", brl(e.valor)] }; });
+            le.push({ c: ["Total", "", "", "", brl(r.entradas)], negrito: true, fundo: "DDE4EC" });
+            filhos.push(grade([{ t: "Data", w: 1250 }, { t: "Tipo", w: 1400 }, { t: "Origem", w: 2600 }, { t: "Finalidade", w: 2989 }, { t: "Valor", w: 1400, a: "r" }], le));
+          }
+          secao("Saldo do evento");
+          filhos.push(grade([{ t: "Composição", w: 7639 }, { t: "Valor", w: 2000, a: "r" }], [
+            { c: ["Entradas (adiantamentos e inscrições)", brl(r.entradas)] },
+            { c: ["Despesas", "- " + brl(r.gasto)] },
+            { c: [saldo < 0 ? "Saldo a receber" : "Saldo disponível", brl(Math.abs(saldo))], negrito: true, fundo: "DDE4EC", cor: saldo < 0 ? WINE : undefined }]));
+        } else {
+          filhos.push(p("Evento pago diretamente pelo caixa da igreja: não há verba adiantada nem saldo a apurar. O valor do resumo é o custo total do evento.", { tam: 21, cor: MUTED, antes: 120 }));
         }
-        secao("Saldo do evento");
-        filhos.push(grade([{ t: "Composição", w: 7639 }, { t: "Valor", w: 2000, a: "r" }], [
-          { c: ["Entradas (adiantamentos e inscrições)", brl(r.entradas)] },
-          { c: ["Despesas", "- " + brl(r.gasto)] },
-          { c: [saldo < 0 ? "Saldo a receber" : "Saldo disponível", brl(Math.abs(saldo))], negrito: true, fundo: "DDE4EC", cor: saldo < 0 ? WINE : undefined }]));
 
         if (r.pend.length) {
           secao("Comprovantes pendentes");
